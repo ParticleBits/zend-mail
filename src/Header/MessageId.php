@@ -68,6 +68,8 @@ class MessageId implements HeaderInterface
     {
         if ($id === null) {
             $id = $this->createMessageId();
+        } else {
+            $id = trim($id, '<>');
         }
 
         if (! HeaderValue::isValid($id)
@@ -76,7 +78,7 @@ class MessageId implements HeaderInterface
             throw new Exception\InvalidArgumentException('Invalid ID detected');
         }
 
-        $this->messageId = sprintf('<%s>', trim($id, "<>"));
+        $this->messageId = sprintf('<%s>', $id);
         return $this;
     }
 
