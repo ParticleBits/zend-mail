@@ -59,10 +59,11 @@ class Imap
      * @param  string      $host  hostname or IP address of IMAP server
      * @param  int|null    $port  of IMAP server, default is 143 (993 for ssl)
      * @param  string|bool $ssl   use 'SSL', 'TLS' or false
+     * @param  array $ssl_context_options options, passed to stream_context_create()
      * @throws Exception\RuntimeException
      * @return string welcome message
      */
-    public function connect($host, $port = null, $ssl = false)
+    public function connect($host, $port = null, $ssl = false, $ssl_context_options = [])
     {
         $isTls = false;
 
@@ -87,7 +88,15 @@ class Imap
         }
 
         ErrorHandler::start();
-        $this->socket = fsockopen($host, $port, $errno, $errstr, self::TIMEOUT_CONNECTION);
+        $context = stream_context_create($ssl_context_options);
+        $this->socket = stream_socket_client(
+            $host.':'.$port,
+            $errno,
+            $errstr,
+            self::TIMEOUT_CONNECTION,
+            STREAM_CLIENT_CONNECT,
+            $context
+        );
         $error = ErrorHandler::stop();
         if (!$this->socket) {
             throw new Exception\RuntimeException(sprintf(
@@ -606,19 +615,21 @@ class Imap
      *
      * @param  string $reference mailbox reference for list
      * @param  string $mailbox   mailbox name match with wildcards
+     * @param  bool $subscribedOnly get only subscribed folders or all folders*
      * @return array mailboxes that matched $mailbox as array(globalName => array('delim' => .., 'flags' => ..))
      * @throws \Zend\Mail\Protocol\Exception\ExceptionInterface
      */
-    public function listMailbox($reference = '', $mailbox = '*')
+    public function listMailbox($reference = '', $mailbox = '*', $subscribedOnly = false)
     {
+        $command = $subscribedOnly ? 'LSUB' : 'LIST';
         $result = [];
-        $list = $this->requestAndResponse('LIST', $this->escapeString($reference, $mailbox));
+        $list = $this->requestAndResponse($command, $this->escapeString($reference, $mailbox));
         if (!$list || $list === true) {
             return $result;
         }
 
         foreach ($list as $item) {
-            if (count($item) != 4 || $item[0] != 'LIST') {
+            if (count($item) != 4 || $item[0] != $command) {
                 continue;
             }
             $result[$item[3]] = ['delim' => $item[2], 'flags' => $item[1]];
